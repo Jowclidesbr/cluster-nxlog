@@ -1,0 +1,15 @@
+#!/bin/bash
+set -euo pipefail
+VIP="{{ cluster_vip }}"
+NODE="$(hostname -s)"
+ROLE="BACKUP"
+ip -o addr show | grep -q "${VIP}/" && ROLE="ACTIVE"
+NXLOG="$(systemctl is-active {{ nxlog_service_name }} 2>/dev/null || true)"
+KEEPALIVED="$(systemctl is-active keepalived 2>/dev/null || true)"
+PORT="$(ss -lntup 2>/dev/null | grep -E '[:.]{{ nxlog_check_port }}([[:space:]]|$)' | tr '\n' ' ' | sed 's/"/\\"/g')"
+mkdir -p /var/lib/cluster-ha-nxlog
+TMP="$(mktemp)"
+printf '{"timestamp":"%s","hostname":"%s","role":"%s","vip":"%s","nxlog":"%s","keepalived":"%s","listener":"%s"}\n' \
+  "$(date -Is)" "$NODE" "$ROLE" "$VIP" "$NXLOG" "$KEEPALIVED" "$PORT" > "$TMP"
+install -m 0644 "$TMP" /var/lib/cluster-ha-nxlog/status.json
+rm -f "$TMP"

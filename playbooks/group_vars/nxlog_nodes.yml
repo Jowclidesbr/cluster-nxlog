@@ -1,0 +1,20 @@
+cluster_name: NXLOG_HA
+cluster_vip: 192.168.15.108
+cluster_vip_cidr: 24
+cluster_interface: eth0             # AJUSTAR: ip -br addr
+cluster_vrrp_router_id: 51
+cluster_vrrp_password: Troque123       # máximo 8 caracteres
+cluster_unicast_src:
+  nxlog-node-01: 192.168.15.106
+  nxlog-node-02: 192.168.15.107
+cluster_priority:
+  nxlog-node-01: 150
+  nxlog-node-02: 100
+nxlog_service_name: nxlog
+nxlog_check_port: 514
+nxlog_check_protocol: tcp              # tcp ou udp
+cluster_dashboard_path: /var/www/html/nxlog
+cluster_status_path: /var/lib/cluster-ha-nxlog/status.json
+cluster_cli_path: /usr/local/sbin/cluster-ha-nxlog
+cluster_monitor_interval: 5
+cluster_ssh_user: root  # mesmo usuário do inventory

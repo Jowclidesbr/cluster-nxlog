@@ -1,0 +1,6 @@
+[Unit]
+Description=Collect local NXLog HA status
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/cluster-ha-nxlog/collect_status.sh

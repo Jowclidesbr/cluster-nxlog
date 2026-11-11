@@ -1,0 +1,110 @@
+---
+- name: Configure NXLog active/passive HA
+  hosts: nxlog_nodes
+  become: true
+  vars:
+    peer_name: "{{ 'nxlog-node-02' if inventory_hostname == 'nxlog-node-01' else 'nxlog-node-01' }}"
+  tasks:
+    - name: Install required packages
+      ansible.builtin.dnf:
+        name:
+          - keepalived
+          - iproute
+          - python3
+        state: present
+
+    - name: Create cluster directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - /etc/cluster-ha-nxlog
+        - /usr/local/libexec/cluster-ha-nxlog
+        - /var/lib/cluster-ha-nxlog
+        - "{{ cluster_dashboard_path }}"
+
+    - name: Install health check
+      ansible.builtin.template:
+        src: ../templates/check_nxlog.sh.j2
+        dest: /usr/local/libexec/cluster-ha-nxlog/check_nxlog.sh
+        owner: root
+        group: root
+        mode: "0750"
+
+    - name: Install Keepalived configuration
+      ansible.builtin.template:
+        src: ../templates/keepalived.conf.j2
+        dest: /etc/keepalived/keepalived.conf
+        owner: root
+        group: root
+        mode: "0640"
+      notify: Restart keepalived
+
+    - name: Install cluster CLI environment
+      ansible.builtin.template:
+        src: ../templates/cluster.env.j2
+        dest: /etc/cluster-ha-nxlog/cluster.env
+        owner: root
+        group: root
+        mode: "0640"
+
+    - name: Install cluster CLI
+      ansible.builtin.copy:
+        src: ../files/cluster-ha-nxlog
+        dest: "{{ cluster_cli_path }}"
+        owner: root
+        group: root
+        mode: "0750"
+
+    - name: Install status collector
+      ansible.builtin.template:
+        src: ../templates/collect_status.sh.j2
+        dest: /usr/local/libexec/cluster-ha-nxlog/collect_status.sh
+        owner: root
+        group: root
+        mode: "0750"
+
+    - name: Install systemd service
+      ansible.builtin.copy:
+        src: ../files/cluster-ha-nxlog-status.service
+        dest: /etc/systemd/system/cluster-ha-nxlog-status.service
+        mode: "0644"
+
+    - name: Install systemd timer
+      ansible.builtin.template:
+        src: ../templates/cluster-ha-nxlog-status.timer.j2
+        dest: /etc/systemd/system/cluster-ha-nxlog-status.timer
+        mode: "0644"
+
+    - name: Install PHP dashboard
+      ansible.builtin.copy:
+        src: ../files/index.php
+        dest: "{{ cluster_dashboard_path }}/index.php"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Enable services
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        enabled: true
+        state: started
+        daemon_reload: true
+      loop:
+        - keepalived
+        - cluster-ha-nxlog-status.timer
+
+    - name: Ensure NXLog enabled and running
+      ansible.builtin.systemd:
+        name: "{{ nxlog_service_name }}"
+        enabled: true
+        state: started
+
+  handlers:
+    - name: Restart keepalived
+      ansible.builtin.systemd:
+        name: keepalived
+        state: restarted

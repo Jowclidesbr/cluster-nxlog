@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+set -euo pipefail
+CONFIG="/etc/cluster-ha-nxlog/cluster.env"
+[[ -r "$CONFIG" ]] && source "$CONFIG"
+N1="${NODE1_NAME:-nxlog-node-01}"; IP1="${NODE1_IP:-192.168.15.106}"
+N2="${NODE2_NAME:-nxlog-node-02}"; IP2="${NODE2_IP:-192.168.15.107}"
+VIP="${CLUSTER_VIP:-192.168.15.108}"
+SSH_USER="${SSH_USER:-$SUDO_USER}"
+SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new)
+remote() {
+  local host="$1"; shift
+  if [[ "$host" == "$(hostname -s)" || "$host" == "$(hostname -f 2>/dev/null)" ]]; then
+    "$@"
+  else
+    ssh "${SSH_OPTS[@]}" "${SSH_USER:+$SSH_USER@}$host" "sudo $*"
+  fi
+}
+usage() {
+  echo "Uso: cluster-ha-nxlog {status|start|stop|migrate|set-primary nxlog-node-01|nxlog-node-02}"
+}
+status() {
+  echo "=== NXLOG HA ==="
+  for entry in "$N1:$IP1" "$N2:$IP2"; do
+    name="${entry%%:*}"; ip="${entry##*:}"
+    echo "--- $name ($ip) ---"
+    ssh "${SSH_OPTS[@]}" "${SSH_USER:+$SSH_USER@}$ip" \
+      "hostname; systemctl is-active nxlog keepalived 2>/dev/null; ip -o addr show | grep -F '$VIP/' || true; cat /var/lib/cluster-ha-nxlog/status.json 2>/dev/null || true" || echo "INACESSIVEL"
+  done
+}
+case "${1:-}" in
+ status) status ;;
+ start)
+   for ip in "$IP1" "$IP2"; do
+     ssh "${SSH_OPTS[@]}" "${SSH_USER:+$SSH_USER@}$ip" "sudo systemctl start nxlog; sudo systemctl start keepalived"
+   done
+   echo "NXLog e Keepalived iniciados nos dois nós."
+   ;;
+ stop)
+   for ip in "$IP1" "$IP2"; do
+     ssh "${SSH_OPTS[@]}" "${SSH_USER:+$SSH_USER@}$ip" "sudo systemctl stop keepalived; sudo systemctl stop nxlog" || true
+   done
+   echo "HA e NXLog parados nos dois nós."
+   ;;
+ migrate)
+   current="$(for ip in "$IP1" "$IP2"; do ssh "${SSH_OPTS[@]}" "${SSH_USER:+$SSH_USER@}$ip" "ip -o addr show | grep -q '$VIP/'" >/dev/null 2>&1 && echo "$ip"; done | head -1)"
+   [[ -n "$current" ]] || { echo "VIP não encontrado em nenhum nó"; exit 1; }
+   target="$IP1"; [[ "$current" == "$IP1" ]] && target="$IP2"
+   echo "Migrando VIP de $current para $target..."
+   ssh "${SSH_OPTS[@]}" "${SSH_USER:+$SSH_USER@}$current" "sudo systemctl stop keepalived"
+   sleep 3
+   ssh "${SSH_OPTS[@]}" "${SSH_USER:+$SSH_USER@}$target" "sudo systemctl start keepalived"
+   echo "Comando de migração enviado. Verifique: cluster-ha-nxlog status"
+   ;;
+ set-primary)
+   target="${2:-}"
+   [[ "$target" == "$N1" || "$target" == "$N2" ]] || { usage; exit 2; }
+   for spec in "$N1:$IP1" "$N2:$IP2"; do
+     name="${spec%%:*}"; ip="${spec##*:}"
+     if [[ "$name" == "$target" ]]; then priority=150; else priority=100; fi
+     ssh "${SSH_OPTS[@]}" "${SSH_USER:+$SSH_USER@}$ip" \
+       "sudo sed -i -E 's/^([[:space:]]*priority)[[:space:]]+[0-9]+/\\1 $priority/' /etc/keepalived/keepalived.conf && sudo systemctl restart keepalived"
+   done
+   echo "Preferência alterada: $target (prioridade 150); outro nó (100)."
+   echo "Confira o VIP com: cluster-ha-nxlog status"
+   ;;
+   ;;
+ *) usage; exit 2 ;;
+esac

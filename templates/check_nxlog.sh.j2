@@ -1,0 +1,8 @@
+#!/bin/bash
+set -euo pipefail
+systemctl is-active --quiet {{ nxlog_service_name }} || exit 1
+{% if nxlog_check_protocol == 'udp' %}
+ss -lunH | awk '{print $5}' | grep -Eq '(^|:|\]){{ nxlog_check_port }}$'
+{% else %}
+ss -ltnH | awk '{print $4}' | grep -Eq '(^|:|\]){{ nxlog_check_port }}$'
+{% endif %}

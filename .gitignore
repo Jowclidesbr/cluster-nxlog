@@ -1,0 +1,5 @@
+.env
+*.retry
+*.pyc
+__pycache__/
+group_vars/*/*.retry

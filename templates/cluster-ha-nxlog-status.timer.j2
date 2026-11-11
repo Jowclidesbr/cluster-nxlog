@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh NXLog HA status
+
+[Timer]
+OnBootSec=10
+OnUnitActiveSec={{ cluster_monitor_interval }}
+AccuracySec=1
+
+[Install]
+WantedBy=timers.target
