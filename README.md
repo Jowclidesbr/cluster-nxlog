@@ -91,3 +91,7 @@ O dashboard lê o estado local em `/var/lib/cluster-ha-nxlog/status.json`. O tim
 - O script `stop`/`start` usa SSH para coordenar os dois nós. Execute como root.
 - Para evitar split-brain, não opere manualmente Keepalived nos dois nós ao mesmo tempo; garanta VRRP funcional e monitore a rede.
 - Se o listener for UDP, teste envio real de syslog além do teste de socket UDP (UDP não confirma serviço remoto como TCP).
+=======
+# cluster-nxlog
+cluster-nxlog
+>>>>>>> ecf356cb3dd8817bd3fb2924a8c77629ac5ae510
